@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/iotames/lockunlock/log"
 )
 
 func LockDirFiles(skey []byte, dir string) error {
@@ -50,7 +52,7 @@ func diropt(optname, dir string, eachopt func(fname string) error) error {
 
 		// 跳过正在运行的可执行文件（避免加密自身）
 		// filename == execName 替代 filename == os.Args[0]
-		if filename == execName || filename == "." || filename == ".." {
+		if filename == execName || filename == "." || filename == ".." || filename == "lockunlock.run.log" {
 			continue
 		}
 		if dir != "." {
@@ -58,12 +60,15 @@ func diropt(optname, dir string, eachopt func(fname string) error) error {
 		}
 		if err := eachopt(filename); err != nil {
 			// 加密文件 encrypt.exe 失败: open encrypt.exe: The process cannot access the file because it is being used by another process.
-			fmt.Printf("%s文件 %s 失败: %v\n", optname, filename, err)
+			// fmt.Printf("%s文件 %s 失败: %v\n", optname, filename, err)
+			log.Error("操作失败", "optname", optname, "filename", filename, "error", err)
 			continue
 		}
 
 		count++
-		fmt.Printf("文件%s成功: %s\n", optname, filename)
+		// fmt.Printf("文件%s成功: %s\n", optname, filename)
+		log.Info("操作成功", "optname", optname, "filename", filename)
+
 	}
 	// 显示弹框提示
 	ShowMessage(fmt.Sprintf("%s完成", optname), fmt.Sprintf("总共%s了 %d 个文件", optname, count))
