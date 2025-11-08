@@ -1,0 +1,153 @@
+# This workflow will build a golang project
+# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-go
+
+name: CreateRelease
+
+on:
+  release:
+    types:
+      - prereleased
+      # - released
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  create_release:
+    if: github.event_name == 'push'
+    name: Create Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        if: github.event_name == 'push'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: ${{ github.ref_name }}
+          body: 请移步 [GitLog](https://github.com/iotames/lockunlock/commits/master/) 查看更新日志.
+          draft: false
+          prerelease: true
+
+  build:
+    # if: github.event_name == 'release'
+    # needs: create_release
+    strategy:
+      matrix:
+        goos: [linux, darwin, windows]
+        goarch: [amd64, 386]
+        exclude:
+          - goarch: 386
+            goos: darwin
+    
+    permissions: # 需要设置写权限才能自动发布
+      contents: write
+
+    runs-on: ubuntu-latest
+    env:
+      GOOS: ${{ matrix.goos }}
+      GOARCH: ${{ matrix.goarch }}
+      CGO_ENABLED: 0
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.24.x'
+          
+      - name: Install dependencies
+         # go env -w GOPROXY=https://goproxy.cn,direct
+        run: |
+          go env -w GO111MODULE=on
+          go mod tidy
+
+      - name: Get File Name
+        id: get_filename
+        run: |
+          export _NAME=lockunlock-${{ matrix.goos }}-${{ matrix.goarch }}
+          echo "GOOS: $GOOS, GOARCH: $GOARCH, RELEASE_NAME: $_NAME"
+          echo "ASSET_NAME=$_NAME" >> $GITHUB_OUTPUT
+          echo "ASSET_NAME=$_NAME" >> $GITHUB_ENV
+
+      - name: Prepare Build for Windows
+        if: matrix.goos == 'windows'
+        # 执行 go install 时，Go 工具链会根据当前的 GOOS 和 GOARCH 来编译和安装二进制文件
+        # 由于设置了 GOOS=windows，编译出来的 goversioninfo 是 Windows 可执行文件（.exe 扩展名）
+        # 但 GitHub Actions 运行在 Linux 环境（ubuntu-latest）上，无法直接执行 Windows 的 .exe 文件
+        # 安装路径为：/home/runner/go/bin/windows_amd64/goversioninfo.exe
+        run: |
+          GOOS=linux GOARCH=amd64 go install github.com/josephspurrier/goversioninfo/cmd/goversioninfo@latest
+          GOPATH=$(go env GOPATH)
+          GOVERSIONINFO_TOOL="$GOPATH/bin/goversioninfo"
+          ls "$GOPATH/bin"
+          ROOT_DIR=$(pwd)
+          cd main && $GOVERSIONINFO_TOOL versioninfo.json || echo "generate resource.syso fail"
+          cd $ROOT_DIR && pwd
+    
+      - name: Build
+        run: |
+          echo 'hello.ref=${{ github.ref }}'
+          echo 'hello.ref_name=${{ github.ref_name }}'
+          mkdir -p build_assets
+          go build -v -o build_assets/lockunlock -trimpath -ldflags "-s -w -linkmode internal -buildid= -X 'main.AppVersion=${{ github.ref_name }}' -X 'main.GoVersion=`go version`'" ./main
+      
+      # 每个 step 开始时，工作目录都会恢复到 runner 的工作区根目录。此步骤的cd命令，不影响下一个 step 的工作目录
+      - name: Rename Windows File
+        if: matrix.goos == 'windows'
+        run: |
+          cd ./build_assets || exit 1
+          mv lockunlock lockunlock.exe
+
+      - name: Install zip for Windows packaging
+        if: matrix.goos == 'windows'
+        run: |
+          sudo apt-get update || echo "apt update failed"
+          sudo apt-get install -y zip || echo "install zip failed"
+
+      - name: Package
+        id: package_archive
+        run: |
+          if [[ "$GOOS" == "windows" ]]; then
+            zip -r ${{ steps.get_filename.outputs.ASSET_NAME }}.zip ./build_assets || tar zcvf ${{ steps.get_filename.outputs.ASSET_NAME }}.tar.gz ./build_assets
+            echo "PACKAGE_FORMAT=zip" >> $GITHUB_OUTPUT
+          else
+            tar zcvf ${{ steps.get_filename.outputs.ASSET_NAME }}.tar.gz ./build_assets || echo "tar packaging failed"
+            echo "PACKAGE_FORMAT=tar.gz" >> $GITHUB_OUTPUT
+          fi
+
+      # - name: Package
+      #   run: tar zcvf ${{ steps.get_filename.outputs.ASSET_NAME }}.tar.gz ./build_assets
+
+      # 上传构建产物到 GitHub Actions 的 Artifacts 临时存储空间。 最后一步不需要这一步骤。
+      # 主要用途: 用于在不同 job 之间共享文件，或供开发者手动下载构建产物进行测试
+      # - name: Upload file to Artifacts
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: ${{ steps.get_filename.outputs.ASSET_NAME }}.tar.gz
+      #     path: ${{ steps.get_filename.outputs.ASSET_NAME }}.tar.gz    
+
+      # 上传构建产物到 GitHub release
+      - name: Upload files to GitHub release
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file_glob: true
+          file: ./${{ steps.get_filename.outputs.ASSET_NAME }}.${{ steps.package_archive.outputs.PACKAGE_FORMAT }}
+          tag: ${{ github.ref }}
+          overwrite: true
+
+      # - name: Upload Release Asset
+      #   uses: actions/upload-release-asset@v1
+      #   env:
+      #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      #   with:
+      #     upload_url: ${{ steps.create_release.outputs.upload_url }}
+      #     asset_path: ${{ steps.get_filename.outputs.ASSET_NAME }}.tar.gz
+      #     asset_name: ${{ steps.get_filename.outputs.ASSET_NAME }}.tar.gz
+      #     asset_content_type: application/zip

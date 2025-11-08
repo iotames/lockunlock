@@ -5,7 +5,8 @@ import (
 	"os"
 )
 
-var AppVersion = "v1.0.0"
+var AppVersion = "v1.0.1"
+var GoVersion = "go1.24.1"
 
 func main() {
 	if dev {
@@ -13,7 +14,7 @@ func main() {
 		return
 	}
 	if version {
-		fmt.Printf("lockunlock: %s", AppVersion)
+		fmt.Printf("lockunlock: %s - BuildBy: %s", AppVersion, GoVersion)
 		os.Exit(0)
 	}
 	// 检查密钥长度

@@ -69,7 +69,7 @@ go install github.com/josephspurrier/goversioninfo/cmd/goversioninfo@latest
 goversioninfo versioninfo.json
 
 # 编译
-go build -v -o lock.exe -trimpath -ldflags "-s -w -linkmode internal -buildid= -X 'main.AppVersion=v0.0.1' -X 'main.GoVersion=`go version`'" .
+go build -v -o lock.exe -trimpath -ldflags "-s -w -linkmode internal -buildid= -X 'main.AppVersion=v1.0.1' -X 'main.GoVersion=`go version`'" .
 ```
 
 
