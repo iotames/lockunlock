@@ -1,0 +1,11 @@
+*.yml
+*.csv
+*.exe
+*.exe~
+*.log
+.env
+default.env
+go.sum
+build/
+resource/
+*.syso
