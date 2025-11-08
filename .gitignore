@@ -7,3 +7,4 @@ default.env
 go.sum
 build/
 *.syso
+build_assets/
