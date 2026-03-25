@@ -70,26 +70,57 @@ func aesDecrypt(cipherText, key []byte) ([]byte, error) {
 	return pkcs7Unpadding(cipherText)
 }
 
-// 解密文件
-func DecryptFile(inputPath, outputPath string, key []byte) error {
+// DecryptFile 解密文件
+//
+// 解密流程：
+//  1. AES-256 解密
+//  2. 可选混淆后处理：若 obfuscate 为 true，执行以下混淆恢复步骤：
+//     a. 删除混淆时插入的随机字节（每隔 37 个字节删除 17 个字节）
+//     b. 将字节数组首尾颠倒（恢复原始顺序）
+//  3. 将结果写入输出文件
+//
+// 注意：本函数的 obfuscate 参数必须与加密时使用的 obfuscate 参数一致，
+// 否则解密将失败或得到错误数据。
+//
+// 参数：
+//   - inputPath  string  输入文件路径（加密文件）
+//   - outputPath string  输出文件路径（解密文件）
+//   - key        []byte  AES-256 密钥，长度必须为 32 字节，与加密密钥相同
+//   - obfuscate  bool    是否启用混淆后处理恢复：
+//     true  = 执行混淆恢复步骤
+//     false = 直接输出 AES 解密结果
+//
+// 返回值：
+//   - error 解密过程中出现的任何错误，成功时返回 nil
+func DecryptFile(inputPath, outputPath string, key []byte, obfuscate bool) error {
+	var encryptedData, decryptedData, dataToRestore, originalData []byte
+	var err error
+
 	// 读取加密文件
-	encryptedData, err := os.ReadFile(inputPath)
+	encryptedData, err = os.ReadFile(inputPath)
 	if err != nil {
 		return err
 	}
 
 	// 1. AES解密
-	decryptedData, err := aesDecrypt(encryptedData, key)
+	decryptedData, err = aesDecrypt(encryptedData, key)
 	if err != nil {
 		return err
 	}
 
-	// 2. 移除随机字节
-	withoutRandomBytes := removeRandomBytes(decryptedData)
-
-	// 3. 字节反转（恢复原始顺序）
-	// 反转字节切片（与加密时相同）
-	originalData := ReverseBytes(withoutRandomBytes)
+	// 混淆后处理恢复
+	if obfuscate {
+		// 2. 移除随机字节
+		dataToRestore = removeRandomBytes(decryptedData)
+		if err != nil {
+			return err
+		}
+		// 3. 字节反转（恢复原始顺序）
+		originalData = ReverseBytes(dataToRestore)
+	} else {
+		// 未启用混淆，直接使用解密数据
+		originalData = decryptedData
+	}
 
 	// 写入解密文件
 	return os.WriteFile(outputPath, originalData, 0644)

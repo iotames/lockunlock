@@ -69,25 +69,49 @@ func aesEncrypt(plainText, key []byte) ([]byte, error) {
 	return cipherText, nil
 }
 
-// 加密文件
-func EncryptFile(inputPath, outputPath string, key []byte) error {
+// EncryptFile 加密文件
+//
+// 加密流程：
+//  1. 可选混淆预处理：若 obfuscate 为 true，执行以下混淆步骤：
+//     a. 字节数组首尾颠倒
+//     b. 每隔 37 个字节插入 17 个随机字节
+//  2. 对混淆后（或原始）数据进行 AES-256 加密
+//  3. 将结果写入输出文件
+//
+// 参数：
+//   - inputPath  string  输入文件路径
+//   - outputPath string  输出文件路径
+//   - key        []byte  AES-256 密钥，长度必须为 32 字节
+//   - obfuscate  bool    是否启用混淆预处理：
+//     true  = 执行混淆后加密
+//     false = 直接进行 AES 加密
+//
+// 返回值：
+//   - error 加密过程中出现的任何错误，成功时返回 nil
+func EncryptFile(inputPath, outputPath string, key []byte, obfuscate bool) error {
+	var inputData, dataToEncrypt, encryptedData []byte
+	var err error
 	// 读取原始文件
-	inputData, err := os.ReadFile(inputPath)
+	inputData, err = os.ReadFile(inputPath)
 	if err != nil {
 		return err
 	}
 
-	// 1. 字节反转
-	reversed := ReverseBytes(inputData)
-
-	// 2. 插入随机字节
-	withRandomBytes, err := insertRandomBytes(reversed)
-	if err != nil {
-		return err
+	// 混淆预处理
+	if obfuscate {
+		// 1. 字节反转
+		reversed := ReverseBytes(inputData)
+		// 2. 插入随机字节
+		dataToEncrypt, err = insertRandomBytes(reversed)
+		if err != nil {
+			return err
+		}
+	} else {
+		dataToEncrypt = inputData
 	}
 
 	// 3. AES加密
-	encryptedData, err := aesEncrypt(withRandomBytes, key)
+	encryptedData, err = aesEncrypt(dataToEncrypt, key)
 	if err != nil {
 		return err
 	}

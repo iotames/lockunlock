@@ -9,11 +9,13 @@ import (
 )
 
 func LockDirFiles(skey []byte, dir string) error {
-	return diropt("加密", dir, func(fname string) error { return EncryptFile(fname, fname, skey) })
+	// 加密：先将文件字节数组首尾颠倒，然后每隔37个字节插入随机17个节。最后进行AES-256加密。
+	return diropt("加密", dir, func(fname string) error { return EncryptFile(fname, fname, skey, true) })
 }
 
 func UnlockDirFiles(skey []byte, dir string) error {
-	return diropt("解密", dir, func(fname string) error { return DecryptFile(fname, fname, skey) })
+	// 	解密：对上面步骤进行逆序。先进行AES-256解密，然后每隔37个字节删除17个节，最后将文件字节数组首尾颠倒。
+	return diropt("解密", dir, func(fname string) error { return DecryptFile(fname, fname, skey, true) })
 }
 
 func diropt(optname, dir string, eachopt func(fname string) error) error {

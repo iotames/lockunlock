@@ -5,7 +5,7 @@ import (
 	"os"
 )
 
-var AppVersion = "v1.0.1"
+var AppVersion = "v1.1.0"
 var GoVersion = "go1.24.1"
 
 func main() {
